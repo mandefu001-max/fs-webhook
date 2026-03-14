@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: freelancesurveys-webhook
+    runtime: node
+    plan: free
+    branch: main
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false
