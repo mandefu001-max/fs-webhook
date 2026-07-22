@@ -4,6 +4,24 @@ const admin   = require("firebase-admin");
 const app  = express();
 app.use(express.json());
 
+// ── CORS ───────────────────────────────────────────────────────────────────
+const ALLOWED_ORIGINS = [
+  "https://whatsapp-cheating-zone.web.app",
+  "https://whatsapp-cheating-zone.firebaseapp.com",
+  "http://localhost:5173",
+  "http://localhost:4173",
+];
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+
 // ── Firebase Admin SDK ─────────────────────────────────────────────────────
 // Set FIREBASE_SERVICE_ACCOUNT env var in Render dashboard (JSON string)
 // OR place serviceAccountKey.json in the same folder
@@ -188,6 +206,96 @@ async function creditReferrer(referralCode) {
 
   console.log("✅ Credited referrer:", referralCode, "+ KSh", REFERRAL_BONUS);
 }
+
+// ── PawaPay proxy ──────────────────────────────────────────────────────────
+const PAWAPAY_BASE = process.env.PAWAPAY_BASE_URL || "https://api.pawapay.io";
+const PAWAPAY_CORRESPONDENT = process.env.PAWAPAY_CORRESPONDENT || "MPESA_KEN";
+
+function pawapayHeaders() {
+  const token = process.env.PAWAPAY_API_TOKEN;
+  if (!token) throw new Error("PAWAPAY_API_TOKEN not set");
+  return { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+}
+
+function normalisePhone(raw) {
+  const digits = String(raw).replace(/\D/g, "");
+  if (digits.startsWith("254")) return digits;
+  if (digits.startsWith("0")) return `254${digits.slice(1)}`;
+  if (digits.startsWith("7") || digits.startsWith("1")) return `254${digits}`;
+  return digits;
+}
+
+function genDepositId() {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+// Initiate a PawaPay deposit (browser → this proxy → api.pawapay.io)
+app.post("/pawapay/deposit", async (req, res) => {
+  const { phone, amount, currency = "KES", description = "WACZ Payment" } = req.body;
+  if (!phone || !amount) return res.status(400).json({ error: "phone and amount required" });
+
+  const depositId = genDepositId();
+  const payload = {
+    depositId,
+    amount: String(amount),
+    currency,
+    correspondent: PAWAPAY_CORRESPONDENT,
+    payer: { type: "MSISDN", address: { value: normalisePhone(phone) } },
+    customerTimestamp: new Date().toISOString(),
+    statementDescription: String(description).slice(0, 22),
+  };
+
+  try {
+    const upstream = await fetch(`${PAWAPAY_BASE}/deposits`, {
+      method: "POST",
+      headers: pawapayHeaders(),
+      body: JSON.stringify(payload),
+    });
+    const data = await upstream.json().catch(() => ({}));
+    console.log("[PawaPay] deposit →", upstream.status, JSON.stringify(data));
+
+    if (!upstream.ok || data.status === "REJECTED") {
+      const msg = data.rejectionReason?.rejectionMessage || data.errorMessage || data.message || `HTTP ${upstream.status}`;
+      return res.status(upstream.ok ? 400 : upstream.status).json({ error: msg });
+    }
+    return res.json({ depositId, status: data.status || "ACCEPTED" });
+  } catch (err) {
+    console.error("[PawaPay] deposit error:", err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Check deposit status
+app.post("/pawapay/deposit-status", async (req, res) => {
+  const { depositId } = req.body;
+  if (!depositId) return res.status(400).json({ error: "depositId required" });
+
+  try {
+    const upstream = await fetch(`${PAWAPAY_BASE}/deposits/${encodeURIComponent(depositId)}`, {
+      headers: pawapayHeaders(),
+    });
+    const data = await upstream.json().catch(() => ({}));
+    console.log("[PawaPay] status →", upstream.status, JSON.stringify(data));
+
+    if (!upstream.ok) return res.json({ status: "PENDING" });
+
+    const deposits = Array.isArray(data) ? data : [data];
+    const deposit = deposits.find((d) => d.depositId === depositId) ?? deposits[0];
+    return res.json({ status: deposit?.status || "PENDING" });
+  } catch (err) {
+    console.error("[PawaPay] status error:", err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// PawaPay deposit callback (PawaPay → this server when payment finalises)
+app.post("/pawapay-callback", (req, res) => {
+  console.log("[PawaPay callback]", JSON.stringify(req.body, null, 2));
+  res.json({ received: true });
+});
 
 // ── Start server ───────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
