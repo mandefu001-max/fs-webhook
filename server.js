@@ -287,20 +287,40 @@ app.post("/nexuspay-callback", (req, res) => {
 
 // ── PawaPay proxy ──────────────────────────────────────────────────────────
 const PAWAPAY_BASE = process.env.PAWAPAY_BASE_URL || "https://api.pawapay.io";
-const PAWAPAY_CORRESPONDENT = process.env.PAWAPAY_CORRESPONDENT || "MPESA_KEN";
+
+// Country routing: phone prefix → { correspondent, currency, kesRate }
+// kesRate = how many local currency units per 1 KES
+const PAWAPAY_COUNTRIES = {
+  "229": { correspondent: "MTN_BENI",      currency: "XOF", kesRate: 4.6  }, // Benin
+  "237": { correspondent: "MTN_CMND",      currency: "XAF", kesRate: 4.6  }, // Cameroon
+  "225": { correspondent: "ORANGE_IVCO",   currency: "XOF", kesRate: 4.6  }, // Cote d'Ivoire
+  "243": { correspondent: "AIRTEL_DRC",    currency: "CDF", kesRate: 21.6 }, // DR Congo (CDF)
+  "241": { correspondent: "AIRTEL_GBON",   currency: "XAF", kesRate: 4.6  }, // Gabon
+  "254": { correspondent: "MPESA_KEN",     currency: "KES", kesRate: 1    }, // Kenya
+  "242": { correspondent: "MTN_RCNG",      currency: "XAF", kesRate: 4.6  }, // Republic of Congo
+  "250": { correspondent: "MTN_RWAN",      currency: "RWF", kesRate: 14.2 }, // Rwanda
+  "221": { correspondent: "ORANGE_SENM",   currency: "XOF", kesRate: 4.6  }, // Senegal
+  "232": { correspondent: "ORANGE_SLNE",   currency: "SLE", kesRate: 0.17 }, // Sierra Leone
+  "256": { correspondent: "MTN_UGND",      currency: "UGX", kesRate: 28.5 }, // Uganda
+  "260": { correspondent: "MTN_ZAMB",      currency: "ZMW", kesRate: 0.19 }, // Zambia
+  "255": { correspondent: "VODACOM_TANZE", currency: "TZS", kesRate: 19.7 }, // Tanzania
+};
+
+function getCountryInfo(phone) {
+  const digits = String(phone).replace(/\D/g, "");
+  // Try 3-digit prefixes first, then 2-digit
+  for (const len of [3, 2]) {
+    const prefix = digits.slice(0, len);
+    if (PAWAPAY_COUNTRIES[prefix]) return { ...PAWAPAY_COUNTRIES[prefix], phone: digits };
+  }
+  // Default Kenya
+  return { ...PAWAPAY_COUNTRIES["254"], phone: digits.startsWith("0") ? `254${digits.slice(1)}` : digits };
+}
 
 function pawapayHeaders() {
   const token = process.env.PAWAPAY_API_TOKEN;
   if (!token) throw new Error("PAWAPAY_API_TOKEN not set");
   return { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
-}
-
-function normalisePhone(raw) {
-  const digits = String(raw).replace(/\D/g, "");
-  if (digits.startsWith("254")) return digits;
-  if (digits.startsWith("0")) return `254${digits.slice(1)}`;
-  if (digits.startsWith("7") || digits.startsWith("1")) return `254${digits}`;
-  return digits;
 }
 
 function genDepositId() {
@@ -310,21 +330,26 @@ function genDepositId() {
   });
 }
 
-// Initiate a PawaPay deposit (browser → this proxy → api.pawapay.io)
+// Initiate a PawaPay deposit — auto-detects country/correspondent/currency from phone
 app.post("/pawapay/deposit", async (req, res) => {
-  const { phone, amount, currency = "KES", description = "WACZ Payment" } = req.body;
+  const { phone, amount, description = "WACZ Payment" } = req.body;
   if (!phone || !amount) return res.status(400).json({ error: "phone and amount required" });
+
+  const country = getCountryInfo(phone);
+  // Convert KES amount to local currency, round up to nearest integer
+  const localAmount = Math.ceil(Number(amount) * country.kesRate);
 
   const depositId = genDepositId();
   const payload = {
     depositId,
-    amount: String(amount),
-    currency,
-    correspondent: PAWAPAY_CORRESPONDENT,
-    payer: { type: "MSISDN", address: { value: normalisePhone(phone) } },
+    amount: String(localAmount),
+    currency: country.currency,
+    correspondent: country.correspondent,
+    payer: { type: "MSISDN", address: { value: country.phone } },
     customerTimestamp: new Date().toISOString(),
     statementDescription: String(description).slice(0, 22),
   };
+  console.log("[PawaPay] routing →", country.correspondent, country.currency, localAmount, "from", amount, "KES");
 
   try {
     const upstream = await fetch(`${PAWAPAY_BASE}/deposits`, {
