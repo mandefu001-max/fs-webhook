@@ -291,19 +291,18 @@ const PAWAPAY_BASE = process.env.PAWAPAY_BASE_URL || "https://api.pawapay.io";
 // Country routing: phone prefix → { correspondent, currency, kesRate }
 // kesRate = how many local currency units per 1 KES
 const PAWAPAY_COUNTRIES = {
-  "229": { correspondent: "MTN_BENI",      currency: "XOF", kesRate: 4.6  }, // Benin
-  "237": { correspondent: "MTN_CMND",      currency: "XAF", kesRate: 4.6  }, // Cameroon
-  "225": { correspondent: "ORANGE_IVCO",   currency: "XOF", kesRate: 4.6  }, // Cote d'Ivoire
-  "243": { correspondent: "AIRTEL_DRC",    currency: "CDF", kesRate: 21.6 }, // DR Congo (CDF)
-  "241": { correspondent: "AIRTEL_GBON",   currency: "XAF", kesRate: 4.6  }, // Gabon
+  "229": { correspondent: "MTN_MOMO_BEN",  currency: "XOF", kesRate: 4.6  }, // Benin
+  "237": { correspondent: "MTN_MOMO_CMR",  currency: "XAF", kesRate: 4.6  }, // Cameroon
+  "225": { correspondent: "MTN_MOMO_CIV",  currency: "XOF", kesRate: 4.6  }, // Cote d'Ivoire
+  "243": { correspondent: "AIRTEL_COD",    currency: "CDF", kesRate: 21.6 }, // DR Congo
+  "241": { correspondent: "AIRTEL_GAB",    currency: "XAF", kesRate: 4.6  }, // Gabon
   "254": { correspondent: "MPESA_KEN",     currency: "KES", kesRate: 1    }, // Kenya
-  "242": { correspondent: "MTN_RCNG",      currency: "XAF", kesRate: 4.6  }, // Republic of Congo
-  "250": { correspondent: "MTN_RWAN",      currency: "RWF", kesRate: 14.2 }, // Rwanda
-  "221": { correspondent: "ORANGE_SENM",   currency: "XOF", kesRate: 4.6  }, // Senegal
-  "232": { correspondent: "ORANGE_SLNE",   currency: "SLE", kesRate: 0.17 }, // Sierra Leone
-  "256": { correspondent: "MTN_UGND",      currency: "UGX", kesRate: 28.5 }, // Uganda
-  "260": { correspondent: "MTN_ZAMB",      currency: "ZMW", kesRate: 0.19 }, // Zambia
-  "255": { correspondent: "VODACOM_TANZE", currency: "TZS", kesRate: 19.7 }, // Tanzania
+  "242": { correspondent: "MTN_MOMO_COG",  currency: "XAF", kesRate: 4.6  }, // Republic of Congo
+  "250": { correspondent: "MTN_MOMO_RWA",  currency: "RWF", kesRate: 14.2 }, // Rwanda
+  "221": { correspondent: "ORANGE_SEN",    currency: "XOF", kesRate: 4.6  }, // Senegal
+  "232": { correspondent: "ORANGE_SLE",    currency: "SLE", kesRate: 0.17 }, // Sierra Leone
+  "256": { correspondent: "MTN_MOMO_UGA",  currency: "UGX", kesRate: 28.5 }, // Uganda
+  "260": { correspondent: "MTN_MOMO_ZMB",  currency: "ZMW", kesRate: 0.19 }, // Zambia
 };
 
 function getCountryInfo(phone) {
