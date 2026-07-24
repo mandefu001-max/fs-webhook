@@ -230,11 +230,14 @@ app.post("/nexuspay/stkpush", async (req, res) => {
   if (!phone || !amount) return res.status(400).json({ error: "phone and amount required" });
 
   const ref = reference || `WACZ-${Date.now()}`;
+  const desc = String(description).slice(0, 50);
   const payload = {
     phoneNumber: normalisePhoneNexus(phone),
     amount: Number(amount),
-    reference: ref,
-    description: String(description).slice(0, 50),
+    accountReference: ref,
+    transactionDesc: desc,
+    remarks: desc,
+    description: desc,
   };
 
   try {
