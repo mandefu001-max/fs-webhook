@@ -207,6 +207,81 @@ async function creditReferrer(referralCode) {
   console.log("✅ Credited referrer:", referralCode, "+ KSh", REFERRAL_BONUS);
 }
 
+// ── Nexus Pay (MakamescoPay) proxy ────────────────────────────────────────
+const NEXUS_BASE = "http://makamescopay.com";
+
+function nexusHeaders() {
+  const key = process.env.NEXUSPAY_API_KEY;
+  if (!key) throw new Error("NEXUSPAY_API_KEY not set");
+  return { "Content-Type": "application/json", "X-API-Key": key };
+}
+
+function normalisePhoneNexus(raw) {
+  const digits = String(raw).replace(/\D/g, "");
+  if (digits.startsWith("254")) return digits;
+  if (digits.startsWith("0")) return `254${digits.slice(1)}`;
+  if (digits.startsWith("7") || digits.startsWith("1")) return `254${digits}`;
+  return digits;
+}
+
+// Initiate STK Push
+app.post("/nexuspay/stkpush", async (req, res) => {
+  const { phone, amount, reference, description = "Payment" } = req.body;
+  if (!phone || !amount) return res.status(400).json({ error: "phone and amount required" });
+
+  const ref = reference || `WACZ-${Date.now()}`;
+  const payload = {
+    phoneNumber: normalisePhoneNexus(phone),
+    amount: Number(amount),
+    reference: ref,
+    description: String(description).slice(0, 50),
+  };
+
+  try {
+    const upstream = await fetch(`${NEXUS_BASE}/api/payments/stkpush`, {
+      method: "POST",
+      headers: nexusHeaders(),
+      body: JSON.stringify(payload),
+    });
+    const data = await upstream.json().catch(() => ({}));
+    console.log("[NexusPay] stkpush →", upstream.status, JSON.stringify(data));
+
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({ error: data.message || data.error || `HTTP ${upstream.status}` });
+    }
+    return res.json(data);
+  } catch (err) {
+    console.error("[NexusPay] stkpush error:", err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Check STK Push status
+app.post("/nexuspay/status", async (req, res) => {
+  const { checkoutRequestId } = req.body;
+  if (!checkoutRequestId) return res.status(400).json({ error: "checkoutRequestId required" });
+
+  try {
+    const upstream = await fetch(`${NEXUS_BASE}/api/payments/status/${encodeURIComponent(checkoutRequestId)}`, {
+      headers: nexusHeaders(),
+    });
+    const data = await upstream.json().catch(() => ({}));
+    console.log("[NexusPay] status →", upstream.status, JSON.stringify(data));
+
+    if (!upstream.ok) return res.json({ status: "pending" });
+    return res.json(data);
+  } catch (err) {
+    console.error("[NexusPay] status error:", err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Nexus Pay webhook callback
+app.post("/nexuspay-callback", (req, res) => {
+  console.log("[NexusPay callback]", JSON.stringify(req.body, null, 2));
+  res.json({ received: true });
+});
+
 // ── PawaPay proxy ──────────────────────────────────────────────────────────
 const PAWAPAY_BASE = process.env.PAWAPAY_BASE_URL || "https://api.pawapay.io";
 const PAWAPAY_CORRESPONDENT = process.env.PAWAPAY_CORRESPONDENT || "MPESA_KEN";
