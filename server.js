@@ -8,6 +8,8 @@ app.use(express.json());
 const ALLOWED_ORIGINS = [
   "https://whatsapp-cheating-zone.web.app",
   "https://whatsapp-cheating-zone.firebaseapp.com",
+  "https://lendpesa-loaninstantly.web.app",
+  "https://lendpesa-loaninstantly.firebaseapp.com",
   "http://localhost:5173",
   "http://localhost:4173",
 ];
@@ -282,6 +284,12 @@ app.post("/nexuspay/status", async (req, res) => {
 // Nexus Pay webhook callback
 app.post("/nexuspay-callback", (req, res) => {
   console.log("[NexusPay callback]", JSON.stringify(req.body, null, 2));
+  res.json({ received: true });
+});
+
+// Makamesco (LendPesa) webhook callback
+app.post("/makamesco-callback", (req, res) => {
+  console.log("[Makamesco callback]", JSON.stringify(req.body, null, 2));
   res.json({ received: true });
 });
 
