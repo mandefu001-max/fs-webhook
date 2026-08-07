@@ -407,6 +407,45 @@ app.post("/pawapay-callback", (req, res) => {
   res.json({ received: true });
 });
 
+// ── Paylor (LendPesa) proxy ────────────────────────────────────────────────
+const PAYLOR_BASE = "https://api.paylorke.com/api/v1";
+const PAYLOR_KEY  = "pk_gFtMDZ4MNXp-U2_B0T13RZs8tv3ntCn-";
+const PAYLOR_CH   = "PAYL-JEKVBW";
+
+app.post("/paylor/stkpush", async (req, res) => {
+  const { phone, amount, reference, description = "Payment" } = req.body;
+  if (!phone || !amount) return res.status(400).json({ error: "phone and amount required" });
+
+  try {
+    const upstream = await fetch(`${PAYLOR_BASE}/merchants/payments/stk-push`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${PAYLOR_KEY}` },
+      body: JSON.stringify({ phone, amount, reference, channelId: PAYLOR_CH, description }),
+    });
+    const data = await upstream.json().catch(() => ({}));
+    console.log("[Paylor] stkpush →", upstream.status, JSON.stringify(data));
+    return res.status(upstream.status).json(data);
+  } catch (err) {
+    console.error("[Paylor] stkpush error:", err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/paylor/status/:transactionId", async (req, res) => {
+  const { transactionId } = req.params;
+  try {
+    const upstream = await fetch(`${PAYLOR_BASE}/merchants/payments/transactions/${encodeURIComponent(transactionId)}`, {
+      headers: { "Authorization": `Bearer ${PAYLOR_KEY}` },
+    });
+    const data = await upstream.json().catch(() => ({}));
+    console.log("[Paylor] status →", upstream.status, JSON.stringify(data));
+    return res.status(upstream.status).json(data);
+  } catch (err) {
+    console.error("[Paylor] status error:", err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Start server ───────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("Webhook server running on port", PORT));
