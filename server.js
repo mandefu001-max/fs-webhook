@@ -10,6 +10,8 @@ const ALLOWED_ORIGINS = [
   "https://whatsapp-cheating-zone.firebaseapp.com",
   "https://lendpesa-loaninstantly.web.app",
   "https://lendpesa-loaninstantly.firebaseapp.com",
+  "https://outlieronline-c7f7c.web.app",
+  "https://outlieronline-c7f7c.firebaseapp.com",
   "http://localhost:5173",
   "http://localhost:4173",
 ];
